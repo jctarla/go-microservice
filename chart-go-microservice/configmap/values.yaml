@@ -1,0 +1,7 @@
+ENV_PEM: "paste it"
+ENV_TENANCY_OCID: "ocid1.tenancy.alalalalalalala"
+ENV_USER_OCID: "ocid1.user.oc1.lalalalalalala"
+ENV_REGION: "sa-saopaulo-1"
+ENV_FINGERPRINT: "9c:01:8fkalalalala"
+ENV_CLUSTER_ID: "ocid1.cluster.oc1.lalalalal"
+

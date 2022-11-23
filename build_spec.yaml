@@ -1,0 +1,78 @@
+version: 0.1
+component: build
+timeoutInSeconds: 6000
+runAs: root
+shell: bash
+env:
+  # these are local variables to the build config
+  variables:
+    key: "value"
+  # the value of a vaultVariable is the secret-id (in OCI ID format) stored in the OCI Vault service
+  # you can then access the value of that secret in your build_spec.yaml commands
+  vaultVariables:
+    HELM_REPO_USER: "ocid1.vaultsecret.xxxxx"
+    USER_AUTH_TOKEN: "ocid1.vaultsecret.oc1.xxxx"
+
+  # exportedVariables are made available to use as parameters in sucessor Build Pipeline stages
+  # For this Build to run, the Build Pipeline needs to have a BUILDRUN_HASH parameter set
+  exportedVariables:
+    - BUILDRUN_HASH
+
+steps:
+  - type: Command
+    name: "Export variables"
+    timeoutInSeconds: 40
+    command: |
+      export BUILDRUN_HASH=`echo ${OCI_BUILD_RUN_ID} | rev | cut -c 1-7`
+      echo "BUILDRUN_HASH: " $BUILDRUN_HASH
+    onFailure:
+      - type: Command
+        timeoutInSeconds: 40
+        command: |
+          echo "Handling Failure"
+          echo "Failure successfully handled"
+        timeoutInSeconds: 400
+        runAs: root
+
+  - type: Command
+    timeoutInSeconds: 1200
+    name: "Helm Build"
+    command: |
+      cd chart-go-microservice
+      export BUILDRUN_HASH=${BUILDRUN_HASH}
+      originalChartfile="Chart.yaml"
+      tmpChartfile=$(mktemp)
+      cp --attributes-only --preserve $originalChartfile $tmpChartfile
+      cat $originalChartfile | envsubst > $tmpChartfile && mv $tmpChartfile $originalChartfile
+      originalValuesFile="values.yaml"
+      tmpValuesfile=$(mktemp)
+      cp --attributes-only --preserve $originalValuesFile $tmpValuesfile
+      cat $originalValuesFile | envsubst > $tmpValuesfile && mv $tmpValuesfile $originalValuesFile      
+      helm package .
+      helm registry login ${HELM_REPO} -u ${HELM_REPO_USER} -p ${USER_AUTH_TOKEN}
+      helm push *.tgz ${HELM_REPO_URL}
+      
+  - type: Command
+    timeoutInSeconds: 1200
+    name: "Build container image"
+    command: |
+      pwd
+      ls -lrt 
+      echo ${OCI_WORKSPACE_DIR}
+      docker build -t go-microservice-image:latest -f Dockerfile .
+      docker images
+    onFailure:
+      - type: Command
+        command: |
+          echo "Handling Failure"
+          echo "Failure successfully handled"
+        timeoutInSeconds: 40
+        runAs: root
+
+
+outputArtifacts:
+  - name: docker-image
+    type: DOCKER_IMAGE
+    # this location tag doesn't effect the tag used to deliver the container image
+    # to the Container Registry
+    location: go-microservice-image:latest
